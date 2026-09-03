@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 /fastbk standalone – No protobuf, no AES.
-Only uses aiohttp, hashlib, asyncio.
 Run: python bot.py [concurrency]
 """
 
@@ -11,6 +10,7 @@ import hashlib
 import json
 import os
 import sys
+import urllib.parse  # <-- FIXED: missing import
 from typing import List, Set, Dict, Any
 
 import aiohttp
@@ -41,7 +41,6 @@ async def get_bind_info(token: str) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.get(url, params=params, headers=headers, timeout=15) as resp:
             if resp.status != 200:
-                # Try to read error response
                 try:
                     error_text = await resp.text()
                     raise Exception(f"HTTP {resp.status} – {error_text[:200]}")
