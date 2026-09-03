@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-/fastbk standalone – Termux script for Garena security code bruteforce.
-Usage: python fastbk.py [concurrency]
-Example: python fastbk.py 300
+/fastbk standalone – No protobuf, no AES.
+Only uses aiohttp, hashlib, and asyncio.
+Run: python fastbk.py [concurrency]
 """
 
 import asyncio
@@ -14,29 +14,9 @@ import sys
 from typing import List, Set, Dict, Any
 
 import aiohttp
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# ---------- Protobuf imports ----------
-try:
-    import MajoRLogin_pb2 as mLpB
-    import MajorLoginRes_pb2 as mLrPb
-except ImportError:
-    print("❌ ERROR: MajoRLogin_pb2.py and MajorLoginRes_pb2.py must be in the same directory.")
-    sys.exit(1)
-
-# ---------- AES Keys ----------
-AES_KEY = b'Yg&tc%DEuh6%Zc^8'
-AES_IV = b'6oyZDr22E3ychjM%'
-
-def encrypt(data: bytes) -> bytes:
-    return AES.new(AES_KEY, AES.MODE_CBC, AES_IV).encrypt(pad(data, 16))
-
-def decrypt(data: bytes) -> bytes:
-    return unpad(AES.new(AES_KEY, AES.MODE_CBC, AES_IV).decrypt(data), 16)
 
 # ---------- API Helpers ----------
 async def get_bind_info(token: str) -> Dict[str, Any]:
@@ -298,12 +278,11 @@ if __name__ == "__main__":
         print("❌ Token cannot be empty.")
         sys.exit(1)
 
-    # Parse concurrency from command line
     concurrency = 150
     if len(sys.argv) > 1:
         try:
             concurrency = int(sys.argv[1])
             print(f"⚡ Using concurrency: {concurrency}")
         except ValueError:
-            print("⚠️ Invalid concurrency value, using default 150.")
+            print("⚠️ Invalid concurrency, using default 150.")
     asyncio.run(run_fastbk(token, concurrency))
